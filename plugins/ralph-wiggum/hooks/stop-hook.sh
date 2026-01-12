@@ -9,11 +9,15 @@ set -euo pipefail
 # Read hook input from stdin (advanced stop hook API)
 HOOK_INPUT=$(cat)
 
-# Check if ralph-loop is active
-RALPH_STATE_FILE=".claude/ralph-loop.local.md"
+# Get session_id and transcript_path from hook input
+SESSION_ID=$(echo "$HOOK_INPUT" | jq -r '.session_id')
+TRANSCRIPT_PATH=$(echo "$HOOK_INPUT" | jq -r '.transcript_path')
+
+# Find state file for this session's loop (uses session_id directly)
+RALPH_STATE_FILE=".claude/ralph-loop-${SESSION_ID}.local.md"
 
 if [[ ! -f "$RALPH_STATE_FILE" ]]; then
-  # No active loop - allow exit
+  # No ralph-loop in this session - allow exit
   exit 0
 fi
 
@@ -54,19 +58,8 @@ if [[ $MAX_ITERATIONS -gt 0 ]] && [[ $ITERATION -ge $MAX_ITERATIONS ]]; then
   exit 0
 fi
 
-# Get transcript path from hook input
-TRANSCRIPT_PATH=$(echo "$HOOK_INPUT" | jq -r '.transcript_path')
-
-if [[ ! -f "$TRANSCRIPT_PATH" ]]; then
-  echo "⚠️  Ralph loop: Transcript file not found" >&2
-  echo "   Expected: $TRANSCRIPT_PATH" >&2
-  echo "   This is unusual and may indicate a Claude Code internal issue." >&2
-  echo "   Ralph loop is stopping." >&2
-  rm "$RALPH_STATE_FILE"
-  exit 0
-fi
-
 # Read last assistant message from transcript (JSONL format - one JSON per line)
+# Note: TRANSCRIPT_PATH was already extracted earlier for LOOP_ID lookup
 # First check if there are any assistant messages
 if ! grep -q '"role":"assistant"' "$TRANSCRIPT_PATH"; then
   echo "⚠️  Ralph loop: No assistant messages found in transcript" >&2
